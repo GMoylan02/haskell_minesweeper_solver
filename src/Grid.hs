@@ -1,4 +1,4 @@
-module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, insert, insert2d, cellToChar, printBoard)  where
+module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, insert, insert2d, cellToChar, printBoard, applyCountBombs)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -68,11 +68,75 @@ insert2d x 0 y (z:zs) = insert x y z : zs
 insert2d x n y (z:zs) = z : insert2d x (n-1) y zs 
 
 
+-- todo apply countBombs function to every non-bomb index in a board
+applyCountBombs :: Board -> Board
+applyCountBombs b = foldl updateBoard b [0 .. (rows * cols - 1)]
+  where
+    rows = length b
+    cols = length (head b)
+
+    updateBoard :: Board -> Int -> Board
+    updateBoard board n
+      | isMine (fromMaybe Grid.empty (getCell1d board n)) = board  
+      | otherwise = updateCell board n (updatedCell (fromMaybe Grid.empty (getCell1d board n)))
+      where
+        updatedCell cell = cell { adjMines = countBombs board n }
+
+    -- Get a cell by its 1D index
+    --getCell1d :: Board -> Int -> Cell
+    --getCell1d board idx = board !! (idx `div` cols) !! (idx `mod` cols)
+
+
+--update nth cell in b to be c
+updateCell :: Board -> Int -> Cell -> Board
+updateCell b n c = insert2d c x y b
+  where
+    (x, y) = intToCoord b n
+
+
+--count bombs at index n, assuming n isnt a bomb
+countBombs :: Board -> Int -> Int
+countBombs b n = count
+  where 
+    rows = length b
+    cols = length (head b)
+    (r, c) = (n `div` cols, n `mod` cols)
+    cellTL = getCell1d b ((r-1) * cols + (c-1))
+    cellT = getCell1d b ((r-1) * cols + c)
+    cellTR = getCell1d b ((r-1) * cols + (c+1))
+    cellL = getCell1d b (r * cols + (c-1))
+    cellR = getCell1d b (r * cols + (c+1))
+    cellBL = getCell1d b ((r+1) * cols + (c-1))
+    cellB = getCell1d b ((r+1) * cols + c)
+    cellBR = getCell1d b ((r+1) * cols + (c+1))
+
+    isBomb cell = fromMaybe False (fmap isMine cell)
+    count = sum (map (fromEnum . isBomb) [cellTL, cellT, cellTR, cellL, cellR, cellBL, cellB, cellBR])
+
+
+-- returns the cell at position x,y
+getCell :: Board -> Int -> Int -> Maybe Cell
+getCell b x y
+  | x >= 0 && x < length b && y >= 0 && y < length (head b) = Just ((b !! x) !! y)
+  | otherwise = Nothing
+
+getCell1d :: Board -> Int -> Maybe Cell
+getCell1d b n = getCell b x y
+  where
+    (x, y) = intToCoord b n
+
+intToCoord :: Board -> Int -> (Int, Int)
+intToCoord b n = x
+  where
+    rows = length b
+    cols = length (head b)
+    x = (n `div` cols, n `mod` cols)
+
 -- debug functions
 cellToChar :: Cell -> Char
 cellToChar cell
   | isFlagged cell = 'F'
-  | not (isRevealed cell) = '#'
+--  | not (isRevealed cell) = '#'
   | isMine cell = '*'
   | adjMines cell > 0 = head (show (adjMines cell))
   | otherwise = ' '
