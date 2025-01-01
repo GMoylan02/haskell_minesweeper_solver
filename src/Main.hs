@@ -9,7 +9,10 @@ calculatorSize = 400
 
 main :: IO ()
 main = do
+  let board = generateEmptyBoard 5 5
+  boardWithMines <- placeMines 5 board
   putStrLn "hello"
+  printBoard boardWithMines
 
 {-
 main = do
