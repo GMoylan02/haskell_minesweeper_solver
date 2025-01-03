@@ -1,4 +1,6 @@
-module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, revealBoardCell, flagBoardCell)  where
+module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, 
+insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, 
+revealBoardCell, flagBoardCell, isGameOver)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -111,7 +113,34 @@ countBombs b n = count
     isBomb cell = fromMaybe False (fmap isMine cell)
     count = sum (map (fromEnum . isBomb) [cellTL, cellT, cellTR, cellL, cellR, cellBL, cellB, cellBR])
 
---functions to reveal cell, flag cell, reveal adjacent, check if game over
+isGameOver :: Board -> Bool
+isGameOver b = any isRevealedAndMine cells
+  where
+    numPositions = getNumPositions b
+    cells = [fromMaybe Grid.empty (getCell1d b i) | i <- [0..numPositions-1]]
+    isRevealedAndMine cell = isRevealed cell && isMine cell
+
+--winning board if all non-mine cells are revealed
+--winning board if not any unrevealed tiles that arent mines
+isWinningBoard :: Board -> Bool
+isWinningBoard b = not $ any unrevealedAndNotMine cells
+  where
+    numPositions = getNumPositions b
+    cells = [fromMaybe Grid.empty (getCell1d b i) | i <- [0..numPositions-1]]
+    unrevealedAndNotMine cell = not (isRevealed cell || isMine cell) --equiv to (not (isRevealed cell)) && (not (isMine cell))
+
+minesRemaining :: Board -> Int
+minesRemaining b = length mines
+  where 
+    numPositions = getNumPositions b
+    mines = filter (\cell -> isMine cell && not (isRevealed cell)) [fromMaybe Grid.empty (getCell1d b i) | i <- [0..numPositions-1]]
+
+getNumPositions :: Board -> Int
+getNumPositions b = x
+  where
+    rows = length b
+    cols = length (head b)
+    x = rows * cols
 
 --can be used to flag or reveal a cell
 flagBoardCell :: Int -> Board -> Board
