@@ -24,4 +24,5 @@ executable Example5
                      , threepenny-gui, network
                      , random
                      , array
+                     , time
                      

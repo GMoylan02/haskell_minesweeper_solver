@@ -1,4 +1,4 @@
-module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, insert, insert2d, cellToChar, printBoard, applyCountBombs)  where
+module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, revealBoardCell, flagBoardCell)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -7,6 +7,7 @@ import Graphics.UI.Threepenny.Core
 import Data.Array
 import Data.Maybe (fromMaybe)
 import System.Random (randomRs, mkStdGen)
+import Data.Time.Clock
 
 data Cell = Cell
   { isMine    :: Bool
@@ -36,7 +37,9 @@ placeMines numMines board = do
   let len = length board
   let wid = length $ head board
   let totalCells = len * wid
-  let positions = take numMines . randomRs (0, totalCells - 1) . mkStdGen $ 12
+  currTime <- getCurrentTime
+  let timed = floor $ utctDayTime currTime :: Int
+  let positions = take numMines . randomRs (0, totalCells - 1) . mkStdGen $ timed
   positionsToBoard positions board
 
 positionsToBoard :: [Int] -> Board -> IO Board
@@ -67,8 +70,6 @@ insert2d x n y []     = error ("Row index out of bounds at index " ++ show y)
 insert2d x 0 y (z:zs) = insert x y z : zs 
 insert2d x n y (z:zs) = z : insert2d x (n-1) y zs 
 
-
--- todo apply countBombs function to every non-bomb index in a board
 applyCountBombs :: Board -> Board
 applyCountBombs b = foldl updateBoard b [0 .. (rows * cols - 1)]
   where
@@ -82,9 +83,6 @@ applyCountBombs b = foldl updateBoard b [0 .. (rows * cols - 1)]
       where
         updatedCell cell = cell { adjMines = countBombs board n }
 
-    -- Get a cell by its 1D index
-    --getCell1d :: Board -> Int -> Cell
-    --getCell1d board idx = board !! (idx `div` cols) !! (idx `mod` cols)
 
 
 --update nth cell in b to be c
@@ -113,6 +111,58 @@ countBombs b n = count
     isBomb cell = fromMaybe False (fmap isMine cell)
     count = sum (map (fromEnum . isBomb) [cellTL, cellT, cellTR, cellL, cellR, cellBL, cellB, cellBR])
 
+--functions to reveal cell, flag cell, reveal adjacent, check if game over
+
+--can be used to flag or reveal a cell
+flagBoardCell :: Int -> Board -> Board
+flagBoardCell pos b = b'
+  where
+    newCell = flagCell $ fromMaybe Grid.empty $ getCell1d b pos 
+    b' = updateCell b pos newCell
+
+--TODO if tile empty, recursively apply this to all adjacent empty tiles
+revealBoardCell :: Int -> Board -> Board
+revealBoardCell pos board =
+  let
+    currentCell = fromMaybe Grid.empty $ getCell1d board pos
+    newCell = revealCell currentCell
+    (r, c) = intToCoord board pos
+    cols = length (head board)
+
+    validNeighbors = filter (isValidPos board) 
+      [ (r-1) * cols + (c-1),
+        (r-1) * cols + c,
+        (r-1) * cols + (c+1),
+        r * cols + (c-1),
+        r * cols + (c+1),
+        (r+1) * cols + (c-1),
+        (r+1) * cols + c,
+        (r+1) * cols + (c+1)
+      ]
+
+    newBoard
+      | not (isRevealed currentCell) && not (isMine newCell) && adjMines newCell == 0 =
+          foldr revealBoardCell (updateCell board pos newCell) validNeighbors
+      | otherwise = updateCell board pos newCell
+  in
+    newBoard
+
+
+-- Helper function to check if a position is within bounds
+isValidPos :: Board -> Int -> Bool
+isValidPos board pos =
+  let rows = length board
+      cols = length (head board)
+  in pos >= 0 && pos < rows * cols
+
+
+flagCell :: Cell -> Cell
+flagCell c 
+  | isRevealed c = c
+  | otherwise = c {isFlagged = True}
+
+revealCell :: Cell -> Cell
+revealCell c = c {isRevealed = True}
 
 -- returns the cell at position x,y
 getCell :: Board -> Int -> Int -> Maybe Cell
@@ -136,7 +186,7 @@ intToCoord b n = x
 cellToChar :: Cell -> Char
 cellToChar cell
   | isFlagged cell = 'F'
---  | not (isRevealed cell) = '#'
+  | not (isRevealed cell) = '#'
   | isMine cell = '*'
   | adjMines cell > 0 = head (show (adjMines cell))
   | otherwise = ' '
