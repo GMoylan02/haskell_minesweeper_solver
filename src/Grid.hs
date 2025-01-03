@@ -244,3 +244,5 @@ boardToStrings = map rowToString
 
 printBoard :: Board -> IO ()
 printBoard board = putStrLn $ unlines (boardToStrings board)
+
+

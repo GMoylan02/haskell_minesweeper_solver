@@ -22,30 +22,54 @@ setup initialState window = do
   gameStateRef <- liftIO $ newIORef initialState
   return window # set title "MineSweeper"
 
+  flagModeState <- liftIO $ newIORef True
+  flagButton <- UI.button #. "flagButton" # set UI.text "Flagmode Off" # set UI.id_ "new-button"
+  on UI.click flagButton $ \_ -> do
+    currentState <- liftIO $ readIORef flagModeState
+    let newState = not currentState
+    liftIO $ writeIORef flagModeState newState
+    updateToggleButton flagButton newState
+    liftIO $ putStrLn "Flag Mode toggled"
+
   grid <- UI.div #. "grid"
   forM_ [0 .. rows - 1] $ \row -> do
     rowDiv <- UI.div #. "row"
     forM_ [0 .. cols - 1] $ \col -> do
       let buttonId = "cell-" ++ show row ++ "-" ++ show col
       button <- UI.button #. "cell" # set UI.text "#" # set UI.id_ buttonId -- Add ID here
-      on UI.click button $ const $ handleCellClick gameStateRef (row, col) button
+      on UI.click button $ const $ handleCellClick gameStateRef flagModeState (row, col) button
       element rowDiv #+ [element button]
     element grid #+ [element rowDiv]
 
-  status <- UI.div #. "status" # set UI.text "Game in progress..."
-  getBody window #+ [element grid, element status]
+  status <- UI.div #. "status" # set UI.text "Game in progress..." # set UI.id_ "status"
+
+
+  getBody window #+ [element grid, element status, element flagButton]
+  return ()
+
+updateToggleButton :: Element -> Bool -> UI ()
+updateToggleButton button state = do
+  let (buttonText, buttonClass) = if state
+        then ("Flagmode off", "toggle-button-off")
+        else ("Flagmode on", "toggle-button-on")
+  element button # set UI.text buttonText # set UI.class_ buttonClass
   return ()
 
 
-handleCellClick :: IORef GameState -> (Int, Int) -> Element -> UI ()
-handleCellClick gameStateRef (row, col) button = do
-  liftIO $ putStrLn $ "Clicked on: (" ++ show row ++ ", " ++ show col ++ ")" -- Debug message
+
+
+handleCellClick :: IORef GameState -> IORef Bool -> (Int, Int) -> Element -> UI ()
+handleCellClick gameStateRef flagModeRef (row, col) button = do
+  liftIO $ putStrLn $ "Clicked on: (" ++ show row ++ ", " ++ show col ++ ")"
+  isFlagMode <- liftIO $ readIORef flagModeRef
   gameState <- liftIO $ readIORef gameStateRef
   when (gameOver gameState) $ return ()
   let b = board gameState
   let cols = length (head b)
   let pos = row * cols + col
-  let newGameState = revealBoardCell pos gameState
+  let newGameState = if isFlagMode 
+        then (revealBoardCell pos gameState)
+        else (flagBoardCell pos gameState)
   liftIO $ writeIORef gameStateRef newGameState
 
   let updatedGameOver = gameOver newGameState
@@ -73,6 +97,7 @@ updateGrid gameState = do
 
 updateStatus :: String -> UI ()
 updateStatus msg = do
+  liftIO $ putStrLn $ msg
   window <- askWindow
   status <- UI.getElementById window "status"
   case status of
