@@ -1,6 +1,6 @@
 module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, 
 insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, 
-revealBoardCell, flagBoardCell, isGameOver)  where
+revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame, board, gameOver, isRevealed, isMine, isFlagged, adjMines)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -142,23 +142,18 @@ getNumPositions b = x
     cols = length (head b)
     x = rows * cols
 
---can be used to flag or reveal a cell
-flagBoardCell :: Int -> Board -> Board
-flagBoardCell pos b = b'
-  where
-    newCell = flagCell $ fromMaybe Grid.empty $ getCell1d b pos 
-    b' = updateCell b pos newCell
 
---TODO if tile empty, recursively apply this to all adjacent empty tiles
-revealBoardCell :: Int -> Board -> Board
-revealBoardCell pos board =
+--if tile empty, recursively apply this to all adjacent empty tiles
+revealBoardCell :: Int -> GameState -> GameState
+revealBoardCell pos gameState =
   let
-    currentCell = fromMaybe Grid.empty $ getCell1d board pos
+    currentBoard = board gameState
+    currentCell = fromMaybe Grid.empty $ getCell1d currentBoard pos
     newCell = revealCell currentCell
-    (r, c) = intToCoord board pos
-    cols = length (head board)
+    (r, c) = intToCoord currentBoard pos
+    cols = length (head currentBoard)
 
-    validNeighbors = filter (isValidPos board) 
+    validNeighbors = filter (isValidPos currentBoard) 
       [ (r-1) * cols + (c-1),
         (r-1) * cols + c,
         (r-1) * cols + (c+1),
@@ -171,19 +166,40 @@ revealBoardCell pos board =
 
     newBoard
       | not (isRevealed currentCell) && not (isMine newCell) && adjMines newCell == 0 =
-          foldr revealBoardCell (updateCell board pos newCell) validNeighbors
-      | otherwise = updateCell board pos newCell
+          foldr (\neighborPos gState -> revealBoardCell neighborPos gState) (gameState { board = updateCell currentBoard pos newCell }) validNeighbors
+      | otherwise = gameState { board = updateCell currentBoard pos newCell }
+
+    isGameOver = isMine newCell && not (isFlagged newCell) -- Game over if a mine is revealed
+
   in
-    newBoard
+    newBoard { gameOver = gameOver newBoard || isGameOver }
 
 
--- Helper function to check if a position is within bounds
+initialiseGame :: Int -> Int -> Int -> IO GameState
+initialiseGame rows cols numMines = do
+  emptyBoard <- return $ generateEmptyBoard rows cols
+  boardWithMines <- placeMines numMines emptyBoard
+  let finalBoard = applyCountBombs boardWithMines
+  return GameState {board = finalBoard, gameOver = False, flaggedCount = 0, minesCount = numMines}
+
+
+--check if a position is within bounds
 isValidPos :: Board -> Int -> Bool
 isValidPos board pos =
   let rows = length board
       cols = length (head board)
   in pos >= 0 && pos < rows * cols
 
+
+flagBoardCell :: Int -> GameState -> GameState
+flagBoardCell n state = newState
+  where
+    b = board state
+    numFlags = flaggedCount state
+    currentCell = fromMaybe Grid.empty $ getCell1d b n
+    newCell = flagCell currentCell
+    newBoard = updateCell b n newCell
+    newState = state {board = newBoard, flaggedCount = numFlags + 1}
 
 flagCell :: Cell -> Cell
 flagCell c 
@@ -218,7 +234,7 @@ cellToChar cell
   | not (isRevealed cell) = '#'
   | isMine cell = '*'
   | adjMines cell > 0 = head (show (adjMines cell))
-  | otherwise = ' '
+  | otherwise = '_'
 
 rowToString :: [Cell] -> String
 rowToString = map cellToChar

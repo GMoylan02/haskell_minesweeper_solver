@@ -4,83 +4,77 @@ import Graphics.UI.Threepenny.Core
 
 import Reactive.Threepenny
 import Grid
+import Data.IORef
+import Control.Monad (forM_, when, forM, void)
 
-calculatorSize = 400
+rows, cols, numMines :: Int
+rows = 10
+cols = 10
+numMines = 15
 
 main :: IO ()
 main = do
-  let board = generateEmptyBoard 10 10
-  boardWithMines <- placeMines 15 board
-  let finishedBoard = applyCountBombs boardWithMines
-  putStrLn "hello"
-  let n = revealBoardCell 35 finishedBoard 
-  printBoard n
+  initialState <- initialiseGame rows cols numMines
+  startGUI defaultConfig $ setup initialState
 
-{-
-main = do
-  startGUI defaultConfig setup
+setup :: GameState -> Window -> UI ()
+setup initialState window = do
+  gameStateRef <- liftIO $ newIORef initialState
+  return window # set title "MineSweeper"
 
-setup :: Window -> UI ()
-setup window = do
-  return window # set title "Calculator"
-  
+  grid <- UI.div #. "grid"
+  forM_ [0 .. rows - 1] $ \row -> do
+    rowDiv <- UI.div #. "row"
+    forM_ [0 .. cols - 1] $ \col -> do
+      let buttonId = "cell-" ++ show row ++ "-" ++ show col
+      button <- UI.button #. "cell" # set UI.text "#" # set UI.id_ buttonId -- Add ID here
+      on UI.click button $ const $ handleCellClick gameStateRef (row, col) button
+      element rowDiv #+ [element button]
+    element grid #+ [element rowDiv]
 
-  calculator <- UI.canvas
-    # set UI.height calculatorSize
-    # set UI.width calculatorSize
-    # set UI.style [("border", "solid black 1px"), ("background", "#eee")]
-  
-
--- Create buttons for the numbers and basic operations
-  one <- UI.button #+ [string "1"]
-  two <- UI.button #+ [string "2"]
-  three <- UI.button #+ [string "3"]
-  four <- UI.button #+ [string "4"]
-  five <- UI.button #+ [string "5"]
-  six <- UI.button #+ [string "6"]
-  seven <- UI.button #+ [string "7"]
-  eight <- UI.button #+ [string "8"]
-  nine <- UI.button #+ [string "9"]
-  zero <- UI.button #+ [string "0"]
-  plus <- UI.button #+ [string "+"]
-  minus <- UI.button #+ [string "-"]
-  multiply <- UI.button #+ [string "*"]
-  divide <- UI.button #+ [string "/"]
-  equals <- UI.button #+ [string "="]
-  clear <- UI.button #+ [string "C"]
-
-  -- Input field to display calculations
-  display <- UI.input
-    # set UI.style [("width", "90%"), ("margin", "10px auto"), ("text-align", "right")]
-    # set (UI.attr "readonly") "true"
-
-  on UI.click one $ \_ -> appendText "1" display
-
-  -- Organize buttons into a grid layout
-  let buttonGrid :: [[UI Element]]
-      buttonGrid = [[element seven, element eight, element nine, element divide],
-                    [element four, element five, element six, element multiply],
-                    [element one, element two, element three, element minus],
-                    [element clear, element zero, element equals, element plus]]
-
-
-  grid <- UI.div
-    #+ map (\row -> UI.div #. "row" #+ map (withClass "button") row) buttonGrid
-
-  getBody window #+ [element display, element grid]
-
-
-  
-
+  status <- UI.div #. "status" # set UI.text "Game in progress..."
+  getBody window #+ [element grid, element status]
   return ()
 
-withClass :: String -> UI Element -> UI Element
-withClass cls el = el # set UI.class_ cls
 
-appendText :: String -> UI Element -> UI ()
-appendText newText inputField = do
-  currentText <- get UI.value inputField
-  inputField # set UI.value (currentText ++ newText)
+handleCellClick :: IORef GameState -> (Int, Int) -> Element -> UI ()
+handleCellClick gameStateRef (row, col) button = do
+  liftIO $ putStrLn $ "Clicked on: (" ++ show row ++ ", " ++ show col ++ ")" -- Debug message
+  gameState <- liftIO $ readIORef gameStateRef
+  when (gameOver gameState) $ return ()
+  let b = board gameState
+  let cols = length (head b)
+  let pos = row * cols + col
+  let newGameState = revealBoardCell pos gameState
+  liftIO $ writeIORef gameStateRef newGameState
 
--}
+  let updatedGameOver = gameOver newGameState
+  let victory = isWinningBoard $ board newGameState
 
+  updateGrid newGameState
+  when updatedGameOver $ updateStatus "Game Over!"
+  when (not updatedGameOver && victory) $ updateStatus "You Win!"
+
+
+updateGrid :: GameState -> UI ()
+updateGrid gameState = do
+  let b = board gameState
+  window <- askWindow
+  forM_ (zip [0 ..] b) $ \(row, cells) ->
+    forM_ (zip [0 ..] cells) $ \(col, cell) -> do
+      let cellText = [cellToChar cell]
+      let cellClass = if isRevealed cell then "cell revealed" else "cell hidden"
+      let buttonId = "cell-" ++ show row ++ "-" ++ show col
+      button <- UI.getElementById window buttonId
+      case button of
+        Just b -> element b # set UI.text cellText # set UI.class_ cellClass
+        Nothing -> UI.span #. "hidden-placeholder"
+
+
+updateStatus :: String -> UI ()
+updateStatus msg = do
+  window <- askWindow
+  status <- UI.getElementById window "status"
+  case status of
+    Just s -> void $ element s # set UI.text msg
+    Nothing -> return () 
