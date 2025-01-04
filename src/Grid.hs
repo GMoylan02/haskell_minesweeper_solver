@@ -2,7 +2,8 @@ module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToB
 insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, 
 revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame,
  board, gameOver, isRevealed, isMine, isFlagged, adjMines, Grid.empty, getCell1d, isValidPos, intToCoord, countNeighbourFlags,
- getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours, hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine)  where
+ getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours,
+  hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine, getCell)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -101,20 +102,11 @@ updateCell b n c = insert2d c x y b
 countBombs :: Board -> Int -> Int
 countBombs b n = count
   where 
-    rows = length b
-    cols = length (head b)
-    (r, c) = (n `div` cols, n `mod` cols)
-    cellTL = getCell1d b ((r-1) * cols + (c-1))
-    cellT = getCell1d b ((r-1) * cols + c)
-    cellTR = getCell1d b ((r-1) * cols + (c+1))
-    cellL = getCell1d b (r * cols + (c-1))
-    cellR = getCell1d b (r * cols + (c+1))
-    cellBL = getCell1d b ((r+1) * cols + (c-1))
-    cellB = getCell1d b ((r+1) * cols + c)
-    cellBR = getCell1d b ((r+1) * cols + (c+1))
+    neighbours = getValidNeighbours b n -- List of 1D positions of all valid neighbours
+    neighbourCells = [fromMaybe Grid.empty (getCell1d b pos) | pos <- neighbours]
+    count = length $ filter isMine neighbourCells
 
-    isBomb cell = fromMaybe False (fmap isMine cell)
-    count = sum (map (fromEnum . isBomb) [cellTL, cellT, cellTR, cellL, cellR, cellBL, cellB, cellBR])
+
 
 --checks if game over
 isGameOver :: Board -> Bool
@@ -154,23 +146,28 @@ revealBoardCell gameState pos =
   let
     currentBoard = board gameState
     currentCell = fromMaybe Grid.empty $ getCell1d currentBoard pos
-    newCell = revealCell currentCell
     (r, c) = intToCoord currentBoard pos
     cols = length (head currentBoard)
-
     validNeighbors = getValidNeighbours currentBoard pos
+  
+    (updatedCell, updatedGameState) =
+      if isFlagged currentCell
+      then (currentCell { isRevealed = True, isFlagged = False }, 
+            gameState { flaggedCount = flaggedCount gameState - 1 })
+      else (currentCell { isRevealed = True }, gameState)
 
     newBoard
-      | not (isRevealed currentCell) && not (isMine newCell) && adjMines newCell == 0 =
+      | not (isRevealed currentCell) && not (isMine updatedCell) && adjMines updatedCell == 0 =
           foldr (\neighborPos gState -> revealBoardCell gState neighborPos) 
-                (gameState { board = updateCell currentBoard pos newCell }) 
+                (updatedGameState { board = updateCell currentBoard pos updatedCell }) 
                 validNeighbors
-      | otherwise = gameState { board = updateCell currentBoard pos newCell }
+      | otherwise = updatedGameState { board = updateCell currentBoard pos updatedCell }
 
-    isGameOver = isMine newCell && not (isFlagged newCell)
+    isGameOver = isMine updatedCell && not (isFlagged updatedCell)
 
   in
     newBoard { gameOver = gameOver newBoard || isGameOver }
+
 
 
 initialiseGame :: Int -> Int -> Int -> IO GameState
@@ -297,7 +294,7 @@ probabilityCellIsMine b pos
 
 
 revealCell :: Cell -> Cell
-revealCell c = c {isRevealed = True}
+revealCell c = c {isRevealed = True, isFlagged = False}
 
 -- returns the cell at position x,y
 getCell :: Board -> Int -> Int -> Maybe Cell

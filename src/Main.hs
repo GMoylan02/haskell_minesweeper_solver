@@ -7,11 +7,14 @@ import Grid
 import Solver
 import Data.IORef
 import Control.Monad (forM_, when, forM, void)
+import Data.Maybe (fromMaybe)
 
 rows, cols, numMines :: Int
 rows = 10
 cols = 10
 numMines = 15
+
+gameOngoing = True
 
 main :: IO ()
 main = do
@@ -38,7 +41,11 @@ setup initialState window = do
     gameState <- liftIO $ readIORef gameStateRef
     let newState = flagKnownMine gameState
     liftIO $ writeIORef gameStateRef newState
+    let updatedGameOver = gameOver newState
+    let victory = isWinningBoard $ board newState
     updateGrid newState
+    when updatedGameOver $ updateStatus "Game Over!"
+    when (not updatedGameOver && victory) $ updateStatus "You Win!"
     liftIO $ putStrLn "all mines flagged"
 
   --button for debugging this feature
@@ -47,8 +54,24 @@ setup initialState window = do
     gameState <- liftIO $ readIORef gameStateRef
     let newState = revealSafeCells gameState
     liftIO $ writeIORef gameStateRef newState
+    let updatedGameOver = gameOver newState
+    let victory = isWinningBoard $ board newState
     updateGrid newState
+    when updatedGameOver $ updateStatus "Game Over!"
+    when (not updatedGameOver && victory) $ updateStatus "You Win!"
     liftIO $ putStrLn "All safe cells revealed"
+
+  revealSafestCellButton <- UI.button #. "revealSafestCell" # set UI.text "Reveal the cell with lowest mine probability" # set UI.id_ "revealSafestCell"
+  on UI.click revealSafestCellButton $ \_ -> do
+    gameState <- liftIO $ readIORef gameStateRef
+    let newState = revealSafestCell gameState
+    liftIO $ writeIORef gameStateRef newState
+    let updatedGameOver = gameOver newState
+    let victory = isWinningBoard $ board newState
+    updateGrid newState
+    when updatedGameOver $ updateStatus "Game Over!"
+    when (not updatedGameOver && victory) $ updateStatus "You Win!"
+    liftIO $ putStrLn "Safest cell revealed"
 
   grid <- UI.div #. "grid"
   forM_ [0 .. rows - 1] $ \row -> do
@@ -63,7 +86,7 @@ setup initialState window = do
   status <- UI.div #. "status" # set UI.text "Game in progress..." # set UI.id_ "status"
 
 
-  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton, element revealSafeCellsButton]
+  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton, element revealSafeCellsButton, element revealSafestCellButton]
   return ()
 
 updateToggleButton :: Element -> Bool -> UI ()
@@ -82,6 +105,7 @@ handleCellClick gameStateRef flagModeRef (row, col) button = do
   gameState <- liftIO $ readIORef gameStateRef
   when (gameOver gameState) $ return ()
   let b = board gameState
+  liftIO $ putStrLn $ "This tile is " ++ show (fromMaybe Grid.empty $ getCell b row col)
   let cols = length (head b)
   let pos = row * cols + col
   let newGameState = if isFlagMode 

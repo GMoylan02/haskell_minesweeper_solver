@@ -1,4 +1,4 @@
-module Solver(flagKnownMine, revealRandomCell, revealSafeCells) where
+module Solver(flagKnownMine, revealRandomCell, revealSafeCells, revealSafestCell) where
 
 {-# LANGUAGE OverloadedStrings #-}
 import Grid
@@ -22,18 +22,19 @@ revealRandomCell gameState = do
 
 
 --forall revealed cells with number n, if no.hidden neighbours == n, flag all hidden neighbours
+    --this is bugged
 flagKnownMine :: GameState -> GameState
 flagKnownMine gameState = newState
     where
         b = board gameState
         rows = length b
         cols = length (head b)
-        mines = [pos | pos <- [0..(rows * cols) - 1], 
+        cellsThatNeighbourMines = [pos | pos <- [0..(rows * cols) - 1], 
                  let cell = fromMaybe Grid.empty (getCell1d b pos), 
                  isRevealed cell, 
                  let neighbours = hiddenNeighbours pos b,
                  length neighbours == adjMines cell - countNeighbourFlags b pos]
-        newState = foldl flagHiddenNeighbours gameState mines
+        newState = foldl flagHiddenNeighbours gameState cellsThatNeighbourMines
 
 --for all revealed cells with number n, if no. flagged neighbours == n, reveal all remaining hidden neighbours
     
@@ -57,9 +58,10 @@ revealSafestCell gameState = newState
         b = board gameState
         rows = length b
         cols = length (head b)
-        sortedCellsBySafety = sortBy (comparing (probabilityCellIsMine b)) [pos | pos <- [0..(rows * cols) - 1],
+        sortedCellsBySafety = sortBy (comparing (negate . probabilityCellIsMine b)) [pos | pos <- [0..(rows * cols) - 1],
                 let cell = fromMaybe Grid.empty (getCell1d b pos),
-                not (isRevealed cell)]
+                not (isRevealed cell),
+                not (isFlagged cell)]
         newState = 
             if null sortedCellsBySafety then gameState
             else revealBoardCell gameState $ head sortedCellsBySafety
