@@ -153,26 +153,29 @@ revealBoardCell pos gameState =
     (r, c) = intToCoord currentBoard pos
     cols = length (head currentBoard)
 
-    validNeighbors = filter (isValidPos currentBoard) 
-      [ (r-1) * cols + (c-1),
-        (r-1) * cols + c,
-        (r-1) * cols + (c+1),
-        r * cols + (c-1),
-        r * cols + (c+1),
-        (r+1) * cols + (c-1),
-        (r+1) * cols + c,
-        (r+1) * cols + (c+1)
-      ]
+    validNeighbors = 
+      let rows = length currentBoard
+          cols = length (head currentBoard)
+          neighbors = [(r-1, c-1), (r-1, c), (r-1, c+1),
+                       (r,   c-1),           (r,   c+1),
+                       (r+1, c-1), (r+1, c), (r+1, c+1)]
+      in
+        map (\(row, col) -> row * cols + col)
+        $ filter (\(row, col) -> row >= 0 && row < rows && col >= 0 && col < cols)
+                 neighbors
 
     newBoard
       | not (isRevealed currentCell) && not (isMine newCell) && adjMines newCell == 0 =
-          foldr (\neighborPos gState -> revealBoardCell neighborPos gState) (gameState { board = updateCell currentBoard pos newCell }) validNeighbors
+          foldr (\neighborPos gState -> revealBoardCell neighborPos gState) 
+                (gameState { board = updateCell currentBoard pos newCell }) 
+                validNeighbors
       | otherwise = gameState { board = updateCell currentBoard pos newCell }
 
-    isGameOver = isMine newCell && not (isFlagged newCell) -- Game over if a mine is revealed
+    isGameOver = isMine newCell && not (isFlagged newCell)
 
   in
     newBoard { gameOver = gameOver newBoard || isGameOver }
+
 
 
 initialiseGame :: Int -> Int -> Int -> IO GameState
@@ -204,7 +207,7 @@ flagBoardCell n state = newState
 flagCell :: Cell -> Cell
 flagCell c 
   | isRevealed c = c
-  | otherwise = c {isFlagged = True}
+  | otherwise = c {isFlagged = (not (isFlagged c))}
 
 revealCell :: Cell -> Cell
 revealCell c = c {isRevealed = True}
