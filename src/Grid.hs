@@ -2,7 +2,7 @@ module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToB
 insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, 
 revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame,
  board, gameOver, isRevealed, isMine, isFlagged, adjMines, Grid.empty, getCell1d, isValidPos, intToCoord, countNeighbourFlags,
- getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours, hiddenNeighbours)  where
+ getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours, hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -42,7 +42,7 @@ placeMines numMines board = do
   let wid = length $ head board
   let totalCells = len * wid
   currTime <- getCurrentTime
-  let timed = floor $ utctDayTime currTime :: Int
+  let timed = floor $ utctDayTime currTime :: Int --not the best but fine for now
   let positions = take numMines . randomRs (0, totalCells - 1) . mkStdGen $ timed
   positionsToBoard positions board
 
@@ -65,7 +65,7 @@ insert x 0 []       = [x]
 insert x _ []       = error "Index out of bounds"
 insert x 0 (_:xs)   = x : xs 
 insert x n (z:zs)
-  | n < 0           = error ("Negative index " ++ show n)
+  | n < 0           = error ("Negative index " ++ show n) --debug
   | otherwise       = z : insert x (n-1) zs 
 
 insert2d :: a -> Int -> Int -> [[a]] -> [[a]]
@@ -74,6 +74,7 @@ insert2d x n y []     = error ("Row index out of bounds at index " ++ show y)
 insert2d x 0 y (z:zs) = insert x y z : zs 
 insert2d x n y (z:zs) = z : insert2d x (n-1) y zs 
 
+--given a board without adjacency counts, returns the same board with completed counts
 applyCountBombs :: Board -> Board
 applyCountBombs b = foldl updateBoard b [0 .. (rows * cols - 1)]
   where
@@ -89,14 +90,14 @@ applyCountBombs b = foldl updateBoard b [0 .. (rows * cols - 1)]
 
 
 
---update nth cell in b to be c
+--update nth cell in board b to be cell c
 updateCell :: Board -> Int -> Cell -> Board
 updateCell b n c = insert2d c x y b
   where
     (x, y) = intToCoord b n
 
 
---count bombs at index n, assuming n isnt a bomb
+--count bombs neighbouring 1d index n, assuming n isnt a bomb
 countBombs :: Board -> Int -> Int
 countBombs b n = count
   where 
@@ -115,6 +116,7 @@ countBombs b n = count
     isBomb cell = fromMaybe False (fmap isMine cell)
     count = sum (map (fromEnum . isBomb) [cellTL, cellT, cellTR, cellL, cellR, cellBL, cellB, cellBR])
 
+--checks if game over
 isGameOver :: Board -> Bool
 isGameOver b = any isRevealedAndMine cells
   where
@@ -131,12 +133,14 @@ isWinningBoard b = not $ any unrevealedAndNotMine cells
     cells = [fromMaybe Grid.empty (getCell1d b i) | i <- [0..numPositions-1]]
     unrevealedAndNotMine cell = not (isRevealed cell || isMine cell) --equiv to (not (isRevealed cell)) && (not (isMine cell))
 
+--counts number of mines (unused)
 minesRemaining :: Board -> Int
 minesRemaining b = length mines
   where 
     numPositions = getNumPositions b
     mines = filter (\cell -> isMine cell && not (isRevealed cell)) [fromMaybe Grid.empty (getCell1d b i) | i <- [0..numPositions-1]]
 
+-- returns size of board
 getNumPositions :: Board -> Int
 getNumPositions b = x
   where
@@ -144,10 +148,9 @@ getNumPositions b = x
     cols = length (head b)
     x = rows * cols
 
-
 --if tile empty, recursively apply this to all adjacent empty tiles
-revealBoardCell :: Int -> GameState -> GameState
-revealBoardCell pos gameState =
+revealBoardCell :: GameState -> Int -> GameState
+revealBoardCell gameState pos =
   let
     currentBoard = board gameState
     currentCell = fromMaybe Grid.empty $ getCell1d currentBoard pos
@@ -159,7 +162,7 @@ revealBoardCell pos gameState =
 
     newBoard
       | not (isRevealed currentCell) && not (isMine newCell) && adjMines newCell == 0 =
-          foldr (\neighborPos gState -> revealBoardCell neighborPos gState) 
+          foldr (\neighborPos gState -> revealBoardCell gState neighborPos) 
                 (gameState { board = updateCell currentBoard pos newCell }) 
                 validNeighbors
       | otherwise = gameState { board = updateCell currentBoard pos newCell }
@@ -168,7 +171,6 @@ revealBoardCell pos gameState =
 
   in
     newBoard { gameOver = gameOver newBoard || isGameOver }
-
 
 
 initialiseGame :: Int -> Int -> Int -> IO GameState
@@ -187,6 +189,7 @@ isValidPos board pos =
   in pos >= 0 && pos < rows * cols
 
 
+--toggles a flag at a 1d position, updates all relevant GameStates
 toggleFlagBoardCell :: Int -> GameState -> GameState
 toggleFlagBoardCell n state = newState
   where
@@ -197,11 +200,13 @@ toggleFlagBoardCell n state = newState
     newBoard = updateCell b n newCell
     newState = state {board = newBoard, flaggedCount = numFlags + 1}
 
+--toggles a cell flag
 toggleFlagCell :: Cell -> Cell
 toggleFlagCell c 
   | isRevealed c = c
   | otherwise = c {isFlagged = (not (isFlagged c))}
 
+--ensures a cell is flagged if not revealed
 flagCell :: Cell -> Cell
 flagCell c
   | isRevealed c = c
@@ -212,23 +217,48 @@ isHidden b pos = not $ isRevealed cell
   where
     cell = fromMaybe Grid.empty $ getCell1d b pos
 
+--counts number of flagged neighbours at a 1d coord
 countNeighbourFlags :: Board -> Int -> Int
 countNeighbourFlags b pos = length (filter isFlagged neighbours)
   where
     neighbours = map (fromMaybe Grid.empty . getCell1d b) (getValidNeighbours b pos)
 
+--flags all cells given by a list of 1d coords, updates GameState accordingly
 flagListOfPositions :: GameState -> [Int] -> GameState
 flagListOfPositions gameState positions = foldl flagBoardCell gameState positions
 
+--flags all hidden neighbours at a 1d coord, updates GameState accordingly
 flagHiddenNeighbours :: GameState -> Int -> GameState
 flagHiddenNeighbours gameState pos =
       let b = board gameState
           neighbours = hiddenNeighbours pos b
       in foldl flagBoardCell gameState neighbours
 
+--gets list of hidden valid neighbours as list of 1d positions
 hiddenNeighbours :: Int -> Board -> [Int]
 hiddenNeighbours pos b = filter (isHidden b) (getValidNeighbours b pos)
 
+--gets list of flagged valid neighbours as list of 1d positions
+flaggedNeighbours :: Int -> Board -> [Int]
+flaggedNeighbours pos b = filter (posIsFlagged b) (getValidNeighbours b pos)
+
+--reveals all hidden valid neighbours that are not flagged
+revealHiddenNeighboursNotFlagged :: GameState -> Int -> GameState
+revealHiddenNeighboursNotFlagged gameState pos = 
+  let b = board gameState
+      neighbours = filter (posIsNotFlagged b) (hiddenNeighbours pos b)
+  in foldl revealBoardCell gameState neighbours
+
+
+--wrapper for isFlagged for use with positions rather than cells
+posIsFlagged :: Board -> Int -> Bool
+posIsFlagged b pos = isFlagged $ fromMaybe Grid.empty $ getCell1d b pos
+
+--for convenience
+posIsNotFlagged :: Board -> Int -> Bool
+posIsNotFlagged b pos = not $ posIsFlagged b pos
+
+--Wrapper to flag a board cell and update relevant counts accordingly
 flagBoardCell :: GameState -> Int -> GameState
 flagBoardCell state n = newState
   where
@@ -239,6 +269,7 @@ flagBoardCell state n = newState
     newBoard = updateCell b n newCell
     newState = state {board = newBoard, flaggedCount = numFlags + 1}
     
+--gets list of all valid neighbours as a list of 1d positions
 getValidNeighbours :: Board -> Int -> [Int]
 getValidNeighbours b pos = 
     let rows = length b
@@ -253,6 +284,17 @@ getValidNeighbours b pos =
                neighbors
 
 
+-- naive way to calculate how likely a tile (denoted by 1d coord) is to be a mine
+probabilityCellIsMine :: Board -> Int -> Double
+probabilityCellIsMine b pos
+  | numHiddenNeighbours == 0 = 0.0 
+  | otherwise = (fromIntegral numMinesInAdjCells - fromIntegral numFlaggedNeighbours) / fromIntegral numHiddenNeighbours
+  where
+    neighbours = getValidNeighbours b pos
+    numMinesInAdjCells = length $ filter isMine (map (\n -> fromMaybe Grid.empty (getCell1d b n)) neighbours)
+    numFlaggedNeighbours = length $ filter (posIsFlagged b) neighbours
+    numHiddenNeighbours = length $ filter (\n -> not (isRevealed (fromMaybe Grid.empty (getCell1d b n)))) neighbours
+
 
 revealCell :: Cell -> Cell
 revealCell c = c {isRevealed = True}
@@ -263,6 +305,7 @@ getCell b x y
   | x >= 0 && x < length b && y >= 0 && y < length (head b) = Just ((b !! x) !! y)
   | otherwise = Nothing
 
+-- returns the cell at 1d coord 'n'
 getCell1d :: Board -> Int -> Maybe Cell
 getCell1d b n = getCell b x y
   where

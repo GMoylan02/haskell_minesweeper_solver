@@ -32,6 +32,7 @@ setup initialState window = do
     updateToggleButton flagButton newState
     liftIO $ putStrLn "Flag Mode toggled"
 
+  --button for debugging this feature
   flagMinesButton <- UI.button #. "flagAllMines" # set UI.text "Flag all known mines" # set UI.id_ "flagAllMines"
   on UI.click flagMinesButton $ \_ -> do
     gameState <- liftIO $ readIORef gameStateRef
@@ -39,6 +40,15 @@ setup initialState window = do
     liftIO $ writeIORef gameStateRef newState
     updateGrid newState
     liftIO $ putStrLn "all mines flagged"
+
+  --button for debugging this feature
+  revealSafeCellsButton <- UI.button #. "revealSafeCells" # set UI.text "Reveal all known safe cells" # set UI.id_ "revealSafeCells"
+  on UI.click revealSafeCellsButton $ \_ -> do
+    gameState <- liftIO $ readIORef gameStateRef
+    let newState = revealSafeCells gameState
+    liftIO $ writeIORef gameStateRef newState
+    updateGrid newState
+    liftIO $ putStrLn "All safe cells revealed"
 
   grid <- UI.div #. "grid"
   forM_ [0 .. rows - 1] $ \row -> do
@@ -53,7 +63,7 @@ setup initialState window = do
   status <- UI.div #. "status" # set UI.text "Game in progress..." # set UI.id_ "status"
 
 
-  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton]
+  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton, element revealSafeCellsButton]
   return ()
 
 updateToggleButton :: Element -> Bool -> UI ()
@@ -75,7 +85,7 @@ handleCellClick gameStateRef flagModeRef (row, col) button = do
   let cols = length (head b)
   let pos = row * cols + col
   let newGameState = if isFlagMode 
-        then (revealBoardCell pos gameState)
+        then (revealBoardCell gameState pos)
         else (toggleFlagBoardCell pos gameState)
   liftIO $ writeIORef gameStateRef newGameState
 

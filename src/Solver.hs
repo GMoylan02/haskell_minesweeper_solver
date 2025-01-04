@@ -1,9 +1,12 @@
-module Solver(flagKnownMine, revealRandomCell) where
+module Solver(flagKnownMine, revealRandomCell, revealSafeCells) where
 
 {-# LANGUAGE OverloadedStrings #-}
 import Grid
 import System.Random (randomRIO)
 import Data.Maybe (fromMaybe)
+import Data.List (sortBy)
+import Data.Ord (comparing)
+
 
 revealRandomCell :: GameState -> IO GameState
 revealRandomCell gameState = do
@@ -15,7 +18,7 @@ revealRandomCell gameState = do
         then return gameState
         else do
             randomIndex <- randomRIO (0, length hiddenCells - 1)
-            return $ revealBoardCell randomIndex gameState
+            return $ revealBoardCell gameState randomIndex
 
 
 --forall revealed cells with number n, if no.hidden neighbours == n, flag all hidden neighbours
@@ -31,10 +34,36 @@ flagKnownMine gameState = newState
                  let neighbours = hiddenNeighbours pos b,
                  length neighbours == adjMines cell - countNeighbourFlags b pos]
         newState = foldl flagHiddenNeighbours gameState mines
-        
 
-        
---For any revealed cell with a number n, if the number of hidden neighbors equals n, all hidden neighbors are mines. Flag them.
+--for all revealed cells with number n, if no. flagged neighbours == n, reveal all remaining hidden neighbours
+    
+revealSafeCells :: GameState -> GameState 
+revealSafeCells gameState = newState
+    where
+        b = board gameState
+        rows = length b
+        cols = length (head b)
+        safeCells = [pos | pos <- [0..(rows * cols) - 1], 
+                 let cell = fromMaybe Grid.empty (getCell1d b pos), 
+                 isRevealed cell, 
+                 let neighbours = flaggedNeighbours pos b,
+                 length neighbours == adjMines cell]
+        newState = foldl revealHiddenNeighboursNotFlagged gameState safeCells
+
+                 
+revealSafestCell :: GameState -> GameState
+revealSafestCell gameState = newState
+    where
+        b = board gameState
+        rows = length b
+        cols = length (head b)
+        sortedCellsBySafety = sortBy (comparing (probabilityCellIsMine b)) [pos | pos <- [0..(rows * cols) - 1],
+                let cell = fromMaybe Grid.empty (getCell1d b pos),
+                not (isRevealed cell)]
+        newState = 
+            if null sortedCellsBySafety then gameState
+            else revealBoardCell gameState $ head sortedCellsBySafety
+
 
 {-pseudocode implementation
 initial move;
