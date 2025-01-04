@@ -1,6 +1,8 @@
 module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToBoard, 
 insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, 
-revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame, board, gameOver, isRevealed, isMine, isFlagged, adjMines)  where
+revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame,
+ board, gameOver, isRevealed, isMine, isFlagged, adjMines, Grid.empty, getCell1d, isValidPos, intToCoord, countNeighbourFlags,
+ getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -25,7 +27,7 @@ data GameState = GameState
   , gameOver :: Bool
   , flaggedCount :: Int
   , minesCount :: Int
-  } deriving (Show)
+  } deriving (Show, Eq)
 
 empty :: Cell
 empty = Cell False False False 0
@@ -153,16 +155,7 @@ revealBoardCell pos gameState =
     (r, c) = intToCoord currentBoard pos
     cols = length (head currentBoard)
 
-    validNeighbors = 
-      let rows = length currentBoard
-          cols = length (head currentBoard)
-          neighbors = [(r-1, c-1), (r-1, c), (r-1, c+1),
-                       (r,   c-1),           (r,   c+1),
-                       (r+1, c-1), (r+1, c), (r+1, c+1)]
-      in
-        map (\(row, col) -> row * cols + col)
-        $ filter (\(row, col) -> row >= 0 && row < rows && col >= 0 && col < cols)
-                 neighbors
+    validNeighbors = getValidNeighbours currentBoard pos
 
     newBoard
       | not (isRevealed currentCell) && not (isMine newCell) && adjMines newCell == 0 =
@@ -194,8 +187,41 @@ isValidPos board pos =
   in pos >= 0 && pos < rows * cols
 
 
-flagBoardCell :: Int -> GameState -> GameState
-flagBoardCell n state = newState
+toggleFlagBoardCell :: Int -> GameState -> GameState
+toggleFlagBoardCell n state = newState
+  where
+    b = board state
+    numFlags = flaggedCount state
+    currentCell = fromMaybe Grid.empty $ getCell1d b n
+    newCell = toggleFlagCell currentCell
+    newBoard = updateCell b n newCell
+    newState = state {board = newBoard, flaggedCount = numFlags + 1}
+
+toggleFlagCell :: Cell -> Cell
+toggleFlagCell c 
+  | isRevealed c = c
+  | otherwise = c {isFlagged = (not (isFlagged c))}
+
+flagCell :: Cell -> Cell
+flagCell c
+  | isRevealed c = c
+  | otherwise = c {isFlagged = True}
+
+isHidden :: Board -> Int -> Bool
+isHidden b pos = not $ isRevealed cell
+  where
+    cell = fromMaybe Grid.empty $ getCell1d b pos
+
+countNeighbourFlags :: Board -> Int -> Int
+countNeighbourFlags b pos = length (filter isFlagged neighbours)
+  where
+    neighbours = map (fromMaybe Grid.empty . getCell1d b) (getValidNeighbours b pos)
+
+flagListOfPositions :: GameState -> [Int] -> GameState
+flagListOfPositions gameState positions = foldl flagBoardCell gameState positions
+
+flagBoardCell :: GameState -> Int -> GameState
+flagBoardCell state n = newState
   where
     b = board state
     numFlags = flaggedCount state
@@ -203,11 +229,21 @@ flagBoardCell n state = newState
     newCell = flagCell currentCell
     newBoard = updateCell b n newCell
     newState = state {board = newBoard, flaggedCount = numFlags + 1}
+    
+getValidNeighbours :: Board -> Int -> [Int]
+getValidNeighbours b pos = 
+    let rows = length b
+        cols = length (head b)
+        (r, c) = intToCoord b pos
+        neighbors = [(r-1, c-1), (r-1, c), (r-1, c+1),
+                     (r,   c-1),           (r,   c+1),
+                     (r+1, c-1), (r+1, c), (r+1, c+1)]
+    in
+      map (\(row, col) -> row * cols + col)
+      $ filter (\(row, col) -> row >= 0 && row < rows && col >= 0 && col < cols)
+               neighbors
 
-flagCell :: Cell -> Cell
-flagCell c 
-  | isRevealed c = c
-  | otherwise = c {isFlagged = (not (isFlagged c))}
+
 
 revealCell :: Cell -> Cell
 revealCell c = c {isRevealed = True}

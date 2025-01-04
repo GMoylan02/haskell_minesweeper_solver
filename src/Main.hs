@@ -69,7 +69,7 @@ handleCellClick gameStateRef flagModeRef (row, col) button = do
   let pos = row * cols + col
   let newGameState = if isFlagMode 
         then (revealBoardCell pos gameState)
-        else (flagBoardCell pos gameState)
+        else (toggleFlagBoardCell pos gameState)
   liftIO $ writeIORef gameStateRef newGameState
 
   let updatedGameOver = gameOver newGameState
