@@ -1,4 +1,4 @@
-module Solver() where
+module Solver(flagKnownMine, revealRandomCell) where
 
 {-# LANGUAGE OverloadedStrings #-}
 import Grid
@@ -30,11 +30,8 @@ flagKnownMine gameState = newState
                  isRevealed cell, 
                  let neighbours = hiddenNeighbours pos b,
                  length neighbours == adjMines cell - countNeighbourFlags b pos]
-        newState = flagListOfPositions gameState mines
+        newState = foldl flagHiddenNeighbours gameState mines
         
-
-hiddenNeighbours :: Int -> Board -> [Int]
-hiddenNeighbours pos b = filter (isHidden b) (getValidNeighbours b pos)
 
         
 --For any revealed cell with a number n, if the number of hidden neighbors equals n, all hidden neighbors are mines. Flag them.

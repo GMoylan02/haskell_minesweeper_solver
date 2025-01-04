@@ -4,6 +4,7 @@ import Graphics.UI.Threepenny.Core
 
 import Reactive.Threepenny
 import Grid
+import Solver
 import Data.IORef
 import Control.Monad (forM_, when, forM, void)
 
@@ -23,13 +24,21 @@ setup initialState window = do
   return window # set title "MineSweeper"
 
   flagModeState <- liftIO $ newIORef True
-  flagButton <- UI.button #. "flagButton" # set UI.text "Flagmode Off" # set UI.id_ "new-button"
+  flagButton <- UI.button #. "flagButton" # set UI.text "Flagmode Off" # set UI.id_ "flagButton"
   on UI.click flagButton $ \_ -> do
     currentState <- liftIO $ readIORef flagModeState
     let newState = not currentState
     liftIO $ writeIORef flagModeState newState
     updateToggleButton flagButton newState
     liftIO $ putStrLn "Flag Mode toggled"
+
+  flagMinesButton <- UI.button #. "flagAllMines" # set UI.text "Flag all known mines" # set UI.id_ "flagAllMines"
+  on UI.click flagMinesButton $ \_ -> do
+    gameState <- liftIO $ readIORef gameStateRef
+    let newState = flagKnownMine gameState
+    liftIO $ writeIORef gameStateRef newState
+    updateGrid newState
+    liftIO $ putStrLn "all mines flagged"
 
   grid <- UI.div #. "grid"
   forM_ [0 .. rows - 1] $ \row -> do
@@ -44,7 +53,7 @@ setup initialState window = do
   status <- UI.div #. "status" # set UI.text "Game in progress..." # set UI.id_ "status"
 
 
-  getBody window #+ [element grid, element status, element flagButton]
+  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton]
   return ()
 
 updateToggleButton :: Element -> Bool -> UI ()
@@ -54,8 +63,6 @@ updateToggleButton button state = do
         else ("Flagmode on", "toggle-button-on")
   element button # set UI.text buttonText # set UI.class_ buttonClass
   return ()
-
-
 
 
 handleCellClick :: IORef GameState -> IORef Bool -> (Int, Int) -> Element -> UI ()
@@ -92,7 +99,7 @@ updateGrid gameState = do
       button <- UI.getElementById window buttonId
       case button of
         Just b -> element b # set UI.text cellText # set UI.class_ cellClass
-        Nothing -> UI.span #. "hidden-placeholder"
+        Nothing -> UI.span #. " "
 
 
 updateStatus :: String -> UI ()

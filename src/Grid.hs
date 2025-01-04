@@ -2,7 +2,7 @@ module Grid(Cell, GameState, Board, generateEmptyBoard, placeMines, positionsToB
 insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell, 
 revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame,
  board, gameOver, isRevealed, isMine, isFlagged, adjMines, Grid.empty, getCell1d, isValidPos, intToCoord, countNeighbourFlags,
- getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions)  where
+ getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours, hiddenNeighbours)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -11,7 +11,7 @@ import Graphics.UI.Threepenny.Core
 import Data.Array
 import Data.Maybe (fromMaybe)
 import System.Random (randomRs, mkStdGen)
-import Data.Time.Clock
+import Data.Time.Clock 
 
 data Cell = Cell
   { isMine    :: Bool
@@ -219,6 +219,15 @@ countNeighbourFlags b pos = length (filter isFlagged neighbours)
 
 flagListOfPositions :: GameState -> [Int] -> GameState
 flagListOfPositions gameState positions = foldl flagBoardCell gameState positions
+
+flagHiddenNeighbours :: GameState -> Int -> GameState
+flagHiddenNeighbours gameState pos =
+      let b = board gameState
+          neighbours = hiddenNeighbours pos b
+      in foldl flagBoardCell gameState neighbours
+
+hiddenNeighbours :: Int -> Board -> [Int]
+hiddenNeighbours pos b = filter (isHidden b) (getValidNeighbours b pos)
 
 flagBoardCell :: GameState -> Int -> GameState
 flagBoardCell state n = newState
