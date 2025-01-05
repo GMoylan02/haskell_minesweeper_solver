@@ -107,7 +107,20 @@ setup initialState window = do
   status <- UI.div #. "status" # set UI.text "Game in progress..." # set UI.id_ "status"
 
 
-  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton, element revealSafeCellsButton, element revealRandomCellButton, element solveButton]
+  debugButtons <- UI.div #. "debug-buttons" #+ 
+    [ element flagMinesButton
+    , element revealSafeCellsButton
+    , element revealRandomCellButton
+    ]
+
+  getBody window #+ 
+    [ element grid
+    , element status
+    , element flagButton
+    , element solveButton
+    , element debugButtons
+    ]
+
   return ()
 
 
@@ -210,14 +223,12 @@ updateGrid gameState = do
     forM_ (zip [0 ..] cells) $ \(col, cell) -> do
       let cellText = [cellToChar cell]
       let cellColour = cellToColour cell
-      let cellClass = if isRevealed cell then "cell revealed" else "cell hidden"
       let buttonId = "cell-" ++ show row ++ "-" ++ show col
       button <- UI.getElementById window buttonId
       case button of
         Just b -> 
           element b 
             # set UI.text cellText 
-            # set UI.class_ cellClass 
             # set UI.style 
               [ ("text-align", "center")
               , ("color", cellColour)
