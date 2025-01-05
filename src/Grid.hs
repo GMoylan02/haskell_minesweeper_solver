@@ -3,7 +3,7 @@ insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell,
 revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame,
  board, gameOver, isRevealed, isMine, isFlagged, adjMines, Grid.empty, getCell1d, isValidPos, intToCoord, countNeighbourFlags,
  getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours,
-  hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine, getCell)  where
+  hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine, getCell, coordToInt, hiddenNeighboursNotFlagged, dummyState, cellToColour)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -13,6 +13,7 @@ import Data.Array
 import Data.Maybe (fromMaybe)
 import System.Random (randomRs, mkStdGen)
 import Data.Time.Clock 
+import Debug.Trace (trace, traceShow)
 
 data Cell = Cell
   { isMine    :: Bool
@@ -35,6 +36,9 @@ empty = Cell False False False 0
 
 generateEmptyBoard :: Int -> Int -> Board
 generateEmptyBoard length width = replicate length (replicate width Grid.empty)
+
+dummyState :: GameState
+dummyState = GameState {board = generateEmptyBoard 5 5, gameOver = False, flaggedCount = 0, minesCount = 0}
 
 
 placeMines :: Int -> Board -> IO Board
@@ -235,6 +239,10 @@ flagHiddenNeighbours gameState pos =
 hiddenNeighbours :: Int -> Board -> [Int]
 hiddenNeighbours pos b = filter (isHidden b) (getValidNeighbours b pos)
 
+hiddenNeighboursNotFlagged :: Int -> Board -> [Int]
+hiddenNeighboursNotFlagged pos b = filter (\n -> isHidden b n && not (posIsFlagged b n)) (getValidNeighbours b pos)
+
+
 --gets list of flagged valid neighbours as list of 1d positions
 flaggedNeighbours :: Int -> Board -> [Int]
 flaggedNeighbours pos b = filter (posIsFlagged b) (getValidNeighbours b pos)
@@ -262,9 +270,24 @@ flagBoardCell state n = newState
     b = board state
     numFlags = flaggedCount state
     currentCell = fromMaybe Grid.empty $ getCell1d b n
-    newCell = flagCell currentCell
-    newBoard = updateCell b n newCell
-    newState = state {board = newBoard, flaggedCount = numFlags + 1}
+
+    newCell = 
+      if isFlagged currentCell || isRevealed currentCell
+        then currentCell 
+        else flagCell currentCell
+
+    newBoard = 
+      if isFlagged currentCell || isRevealed currentCell
+        then b 
+        else updateCell b n newCell
+
+    newFlagCount = 
+      if isFlagged currentCell || isRevealed currentCell
+        then numFlags 
+        else numFlags + 1
+
+    newState = state {board = newBoard, flaggedCount = newFlagCount}
+
     
 --gets list of all valid neighbours as a list of 1d positions
 getValidNeighbours :: Board -> Int -> [Int]
@@ -280,17 +303,40 @@ getValidNeighbours b pos =
       $ filter (\(row, col) -> row >= 0 && row < rows && col >= 0 && col < cols)
                neighbors
 
+getValidKnownNeighbours :: Board -> Int -> [Int]
+getValidKnownNeighbours b pos = filter (\n -> (isRevealed (fromMaybe Grid.empty (getCell1d b n)))) $ getValidNeighbours b pos
+
 
 -- naive way to calculate how likely a tile (denoted by 1d coord) is to be a mine
 probabilityCellIsMine :: Board -> Int -> Double
 probabilityCellIsMine b pos
-  | numHiddenNeighbours == 0 = 0.0 
-  | otherwise = (fromIntegral numMinesInAdjCells - fromIntegral numFlaggedNeighbours) / fromIntegral numHiddenNeighbours
+  | numHiddenNeighbours == 0 = traceShow ("Cell", pos, "has no hidden neighbours") 0.0
+  | otherwise = traceShow ("Cell", pos, 
+                            "Mines:", numMinesInAdjCells, 
+                            "Flagged:", numFlaggedNeighbours, 
+                            "Hidden:", numHiddenNeighbours) $ 
+                            probabilityValue
+
   where
+    knownNeighbours = getValidKnownNeighbours b pos
     neighbours = getValidNeighbours b pos
-    numMinesInAdjCells = length $ filter isMine (map (\n -> fromMaybe Grid.empty (getCell1d b n)) neighbours)
+    numMinesInAdjCells = length $ filter isMine (map (\n -> fromMaybe Grid.empty (getCell1d b n)) knownNeighbours)
     numFlaggedNeighbours = length $ filter (posIsFlagged b) neighbours
-    numHiddenNeighbours = length $ filter (\n -> not (isRevealed (fromMaybe Grid.empty (getCell1d b n)))) neighbours
+    numHiddenNeighbours = length $ filter (\n -> 
+      not (isRevealed (fromMaybe Grid.empty (getCell1d b n))) && 
+      not (posIsFlagged b n)) neighbours
+    p = (fromIntegral numMinesInAdjCells - fromIntegral numFlaggedNeighbours) / fromIntegral numHiddenNeighbours
+    probabilityValue =
+      if p < 0.0 then 1.0 + p
+        else p
+  
+
+
+    debugNeighbours = traceShow ("Cell", pos, 
+                                  "Neighbours:", neighbours,
+                                  "Known Neighbours (revealed):", getValidKnownNeighbours b pos,
+                                  "Valid Neighbours:", getValidNeighbours b pos) ()
+
 
 
 revealCell :: Cell -> Cell
@@ -315,6 +361,12 @@ intToCoord b n = x
     cols = length (head b)
     x = (n `div` cols, n `mod` cols)
 
+coordToInt :: Board -> (Int, Int) -> Int
+coordToInt b (r, c) = x
+  where
+    cols = length (head b)
+    x = r * cols + c
+
 -- debug functions
 cellToChar :: Cell -> Char
 cellToChar cell
@@ -323,6 +375,26 @@ cellToChar cell
   | isMine cell = '*'
   | adjMines cell > 0 = head (show (adjMines cell))
   | otherwise = '_'
+
+cellToColour :: Cell -> String
+cellToColour cell
+  | isFlagged cell = "red"         -- Flagged cells are orange
+  | not (isRevealed cell) = "darkgrey" -- Unrevealed cells are dark grey
+  | isMine cell = "red"             -- Mines are black
+  | adjMines cell > 0 = numberToColour $ adjMines cell -- Use numberToColour for numbers
+  | otherwise = "lightgrey"           -- Empty revealed cells are light grey
+
+
+numberToColour :: Int -> String
+numberToColour 1 = "blue"
+numberToColour 2 = "darkgreen"
+numberToColour 3 = "red"
+numberToColour 4 = "darkblue"
+numberToColour 5 = "darkred"
+numberToColour 6 = "cyan"
+numberToColour 7 = "black"
+numberToColour 8 = "grey"
+numberToColour n = "blue"
 
 rowToString :: [Cell] -> String
 rowToString = map cellToChar

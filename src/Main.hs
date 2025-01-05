@@ -25,7 +25,7 @@ main = do
 setup :: GameState -> Window -> UI ()
 setup initialState window = do
   gameStateRef <- liftIO $ newIORef initialState
-  return window # set title "MineSweeper"
+  return window # set title "Minesweeper"
 
   flagModeState <- liftIO $ newIORef True
   flagButton <- UI.button #. "flagButton" # set UI.text "Flagmode Off" # set UI.id_ "flagButton"
@@ -37,7 +37,7 @@ setup initialState window = do
     liftIO $ putStrLn "Flag Mode toggled"
 
   --button for debugging this feature
-  flagMinesButton <- UI.button #. "flagAllMines" # set UI.text "Flag all known mines" # set UI.id_ "flagAllMines"
+  flagMinesButton <- UI.button #. "flagAllMines" # set UI.text "[Debug] Flag all known mines" # set UI.id_ "flagAllMines"
   on UI.click flagMinesButton $ \_ -> do
     gameState <- liftIO $ readIORef gameStateRef
     let newState = flagKnownMine gameState
@@ -50,7 +50,7 @@ setup initialState window = do
     liftIO $ putStrLn "all mines flagged"
 
   --button for debugging this feature
-  revealSafeCellsButton <- UI.button #. "revealSafeCells" # set UI.text "Reveal all known safe cells" # set UI.id_ "revealSafeCells"
+  revealSafeCellsButton <- UI.button #. "revealSafeCells" # set UI.text "[Debug] Reveal all known safe cells" # set UI.id_ "revealSafeCells"
   on UI.click revealSafeCellsButton $ \_ -> do
     gameState <- liftIO $ readIORef gameStateRef
     let newState = revealSafeCells gameState
@@ -62,24 +62,44 @@ setup initialState window = do
     when (not updatedGameOver && victory) $ updateStatus "You Win!"
     liftIO $ putStrLn "All safe cells revealed"
 
-  revealSafestCellButton <- UI.button #. "revealSafestCell" # set UI.text "Reveal the cell with lowest mine probability" # set UI.id_ "revealSafestCell"
-  on UI.click revealSafestCellButton $ \_ -> do
+  revealRandomCellButton <- UI.button #. "revealRandomCell" # set UI.text "[Debug] Reveal a random cell" # set UI.id_ "revealRandomCell"
+  on UI.click revealRandomCellButton $ \_ -> do
     gameState <- liftIO $ readIORef gameStateRef
-    let newState = revealSafestCell gameState
+    newState <- liftIO $ revealRandomCell gameState
     liftIO $ writeIORef gameStateRef newState
     let updatedGameOver = gameOver newState
     let victory = isWinningBoard $ board newState
     updateGrid newState
     when updatedGameOver $ updateStatus "Game Over!"
     when (not updatedGameOver && victory) $ updateStatus "You Win!"
-    liftIO $ putStrLn "Safest cell revealed"
+    liftIO $ putStrLn "Random cell revealed"
+
+  solveButton <- UI.button #. "solve" # set UI.text "Ask algorithm to attempt to solve" # set UI.id_ "solve"
+  on UI.click solveButton $ \_ -> do
+    gameState <- liftIO $ readIORef gameStateRef
+    newState <- solve gameState
+    liftIO $ writeIORef gameStateRef newState
+    let updatedGameOver = gameOver newState
+    let victory = isWinningBoard $ board newState
+    when updatedGameOver $ updateStatus "Game Over!"
+    when (not updatedGameOver && victory) $ updateStatus "You Win!"
+    liftIO $ putStrLn "Attempted solve"
 
   grid <- UI.div #. "grid"
   forM_ [0 .. rows - 1] $ \row -> do
     rowDiv <- UI.div #. "row"
     forM_ [0 .. cols - 1] $ \col -> do
       let buttonId = "cell-" ++ show row ++ "-" ++ show col
-      button <- UI.button #. "cell" # set UI.text "#" # set UI.id_ buttonId -- Add ID here
+      button <- UI.button #. "cell" # set UI.text "#" # set UI.id_ buttonId # set UI.style [ ("text-align", "center")
+              , ("color", "darkgrey")
+              , ("font-size", "25px")
+              , ("width", "40px")
+              , ("height", "40px")
+              , ("line-height", "40px")
+              , ("display", "inline-block")
+              , ("border", "1px solid black")
+              ]
+
       on UI.click button $ const $ handleCellClick gameStateRef flagModeState (row, col) button
       element rowDiv #+ [element button]
     element grid #+ [element rowDiv]
@@ -87,26 +107,36 @@ setup initialState window = do
   status <- UI.div #. "status" # set UI.text "Game in progress..." # set UI.id_ "status"
 
 
-  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton, element revealSafeCellsButton, element revealSafestCellButton]
+  getBody window #+ [element grid, element status, element flagButton, element flagMinesButton, element revealSafeCellsButton, element revealRandomCellButton, element solveButton]
   return ()
 
 
 {-pseudocode implementation
-while nothingCleared:
+
+while there hasnt been a decent initial clear:
     revealRandomCell;
+flagKnownMine;
+revealSafeCells;
 while not gameOver && not isWinningBoard:
-    store initial board in variable b
-    while no change in b:
+    while b changes:
         flagKnownMine
         revealSafeCells
-    revealSafestCell
+    revealRandomCell
 return gamestate
--}
---solve :: GameState -> IO GameState
---solve gameState = do
-    --gameState' <- handleNothingCleared gameState
 
-    
+-}
+
+solve :: GameState -> UI GameState
+solve gameState = do
+  newState <- handleNothingCleared gameState
+  let minesFlagged = flagKnownMine newState
+  updateGrid minesFlagged
+  liftIO $ threadDelay 1000000
+  let safeCellsRevealed = revealSafeCells minesFlagged
+  updateGrid safeCellsRevealed
+  result <- outerLoop safeCellsRevealed
+  return result
+
 
 handleNothingCleared :: GameState -> UI GameState
 handleNothingCleared gameState | nothingCleared gameState = do
@@ -116,6 +146,27 @@ handleNothingCleared gameState | nothingCleared gameState = do
                                   handleNothingCleared newState
                                 | otherwise = return gameState
 
+outerLoop :: GameState -> UI GameState
+outerLoop gameState | not ((isGameOver b) || isWinningBoard b) = do
+                            newState <- innerLoop dummyState gameState
+                            randomRevealed <- liftIO $ revealRandomCell newState
+                            updateGrid randomRevealed
+                            outerLoop randomRevealed
+                    | otherwise = return gameState
+                    where 
+                      b = board gameState
+
+
+innerLoop :: GameState -> GameState -> UI GameState
+innerLoop initial newState | initial /= newState = do
+                              liftIO $ threadDelay 1000000
+                              let minesFlagged = flagKnownMine newState
+                              updateGrid minesFlagged
+                              liftIO $ threadDelay 1000000
+                              let safeCellsRevealed = revealSafeCells minesFlagged
+                              updateGrid safeCellsRevealed
+                              innerLoop newState safeCellsRevealed
+                            | otherwise = return newState
 
 
 updateToggleButton :: Element -> Bool -> UI ()
@@ -134,7 +185,8 @@ handleCellClick gameStateRef flagModeRef (row, col) button = do
   gameState <- liftIO $ readIORef gameStateRef
   when (gameOver gameState) $ return ()
   let b = board gameState
-  liftIO $ putStrLn $ "This tile is " ++ show (fromMaybe Grid.empty $ getCell b row col)
+  liftIO $ putStrLn $ "This tile is " ++ show (fromMaybe Grid.empty $ getCell b row col) 
+  liftIO $ putStrLn $ "Which is cell " ++ show (coordToInt b (row, col))
   let cols = length (head b)
   let pos = row * cols + col
   let newGameState = if isFlagMode 
@@ -157,12 +209,29 @@ updateGrid gameState = do
   forM_ (zip [0 ..] b) $ \(row, cells) ->
     forM_ (zip [0 ..] cells) $ \(col, cell) -> do
       let cellText = [cellToChar cell]
+      let cellColour = cellToColour cell
       let cellClass = if isRevealed cell then "cell revealed" else "cell hidden"
       let buttonId = "cell-" ++ show row ++ "-" ++ show col
       button <- UI.getElementById window buttonId
       case button of
-        Just b -> element b # set UI.text cellText # set UI.class_ cellClass
-        Nothing -> UI.span #. " "
+        Just b -> 
+          element b 
+            # set UI.text cellText 
+            # set UI.class_ cellClass 
+            # set UI.style 
+              [ ("text-align", "center")
+              , ("color", cellColour)
+              , ("font-size", "25px")
+              , ("width", "40px")
+              , ("height", "40px")
+              , ("line-height", "40px")
+              , ("display", "inline-block")
+              , ("border", "1px solid black")
+              ]
+        Nothing -> do
+           UI.span #. " " -- Return a placeholder element
+
+
 
 
 updateStatus :: String -> UI ()
