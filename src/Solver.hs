@@ -1,4 +1,4 @@
-module Solver(flagKnownMine, revealRandomCell, revealSafeCells, revealSafestCell) where
+module Solver(flagKnownMine, revealRandomCell, revealSafeCells, revealSafestCell, nothingCleared) where
 
 {-# LANGUAGE OverloadedStrings #-}
 import Grid
@@ -6,6 +6,7 @@ import System.Random (randomRIO)
 import Data.Maybe (fromMaybe)
 import Data.List (sortBy)
 import Data.Ord (comparing)
+
 
 
 revealRandomCell :: GameState -> IO GameState
@@ -67,11 +68,18 @@ revealSafestCell gameState = newState
             else revealBoardCell gameState $ head sortedCellsBySafety
 
 
-{-pseudocode implementation
-initial move;
-while game isnt over:
-    store initial board in variable
-    while no change:
-        identify known mines
-return gamestate
--}
+
+boardIsDefault :: GameState -> Bool
+boardIsDefault gameState = all isCellDefault (concat b)
+  where
+    b = board gameState
+    isCellDefault :: Cell -> Bool
+    isCellDefault cell = not (isRevealed cell) && not (isFlagged cell)
+
+
+nothingCleared :: GameState -> Bool
+nothingCleared gameState = not (any isCleared (concat b))
+  where
+    b = board gameState  
+    isCleared cell = isRevealed cell && adjMines cell == 0
+

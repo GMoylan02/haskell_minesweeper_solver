@@ -8,6 +8,7 @@ import Solver
 import Data.IORef
 import Control.Monad (forM_, when, forM, void)
 import Data.Maybe (fromMaybe)
+import Control.Concurrent (threadDelay)
 
 rows, cols, numMines :: Int
 rows = 10
@@ -88,6 +89,34 @@ setup initialState window = do
 
   getBody window #+ [element grid, element status, element flagButton, element flagMinesButton, element revealSafeCellsButton, element revealSafestCellButton]
   return ()
+
+
+{-pseudocode implementation
+while nothingCleared:
+    revealRandomCell;
+while not gameOver && not isWinningBoard:
+    store initial board in variable b
+    while no change in b:
+        flagKnownMine
+        revealSafeCells
+    revealSafestCell
+return gamestate
+-}
+--solve :: GameState -> IO GameState
+--solve gameState = do
+    --gameState' <- handleNothingCleared gameState
+
+    
+
+handleNothingCleared :: GameState -> UI GameState
+handleNothingCleared gameState | nothingCleared gameState = do
+                                  liftIO $ threadDelay 1000000
+                                  newState <- liftIO $ revealRandomCell gameState
+                                  updateGrid newState
+                                  handleNothingCleared newState
+                                | otherwise = return gameState
+
+
 
 updateToggleButton :: Element -> Bool -> UI ()
 updateToggleButton button state = do
