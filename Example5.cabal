@@ -25,5 +25,5 @@ executable Example5
                      , random
                      , array
                      , time
-                  
+                    , ghc
                      

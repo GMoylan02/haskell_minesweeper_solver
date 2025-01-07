@@ -10,17 +10,16 @@ import Control.Monad (forM_, when, forM, void)
 import Data.Maybe (fromMaybe)
 import Control.Concurrent (threadDelay)
 
-rows, cols, numMines :: Int
-rows = 10
-cols = 10
-numMines = 15
 
 gameOngoing = True
 
+
+
 main :: IO ()
 main = do
-  initialState <- initialiseGame rows cols numMines
+  initialState <- initialiseGame boardLength boardWidth numMines
   startGUI defaultConfig $ setup initialState
+  --startGUI defaultConfig $ setup debugState
 
 setup :: GameState -> Window -> UI ()
 setup initialState window = do
@@ -74,6 +73,18 @@ setup initialState window = do
     when (not updatedGameOver && victory) $ updateStatus "You Win!"
     liftIO $ putStrLn "Random cell revealed"
 
+  flag121Pattern <- UI.button #. "flag121Cells" # set UI.text "[Debug] Apply the 121 pattern" # set UI.id_ "flag121Cells"
+  on UI.click flag121Pattern $ \_ -> do
+    gameState <- liftIO $ readIORef gameStateRef
+    let newState = flagMines121 gameState
+    liftIO $ writeIORef gameStateRef newState
+    let updatedGameOver = gameOver newState
+    let victory = isWinningBoard $ board newState
+    updateGrid newState
+    when updatedGameOver $ updateStatus "Game Over!"
+    when (not updatedGameOver && victory) $ updateStatus "You Win!"
+    liftIO $ putStrLn "Applied 121 rule"
+
   solveButton <- UI.button #. "solve" # set UI.text "Ask algorithm to attempt to solve" # set UI.id_ "solve"
   on UI.click solveButton $ \_ -> do
     gameState <- liftIO $ readIORef gameStateRef
@@ -86,9 +97,9 @@ setup initialState window = do
     liftIO $ putStrLn "Attempted solve"
 
   grid <- UI.div #. "grid"
-  forM_ [0 .. rows - 1] $ \row -> do
+  forM_ [0 .. boardLength - 1] $ \row -> do
     rowDiv <- UI.div #. "row"
-    forM_ [0 .. cols - 1] $ \col -> do
+    forM_ [0 .. boardWidth - 1] $ \col -> do
       let buttonId = "cell-" ++ show row ++ "-" ++ show col
       button <- UI.button #. "cell" # set UI.text "#" # set UI.id_ buttonId # set UI.style [ ("text-align", "center")
               , ("color", "darkgrey")
@@ -111,6 +122,7 @@ setup initialState window = do
     [ element flagMinesButton
     , element revealSafeCellsButton
     , element revealRandomCellButton
+    , element flag121Pattern
     ]
 
   getBody window #+ 
@@ -134,6 +146,7 @@ while not gameOver && not isWinningBoard:
     while b changes:
         flagKnownMine
         revealSafeCells
+        flagMines121
     revealRandomCell
 return gamestate
 
@@ -172,13 +185,20 @@ outerLoop gameState | not ((isGameOver b) || isWinningBoard b) = do
 
 innerLoop :: GameState -> GameState -> UI GameState
 innerLoop initial newState | initial /= newState = do
+
                               liftIO $ threadDelay 1000000
                               let minesFlagged = flagKnownMine newState
                               updateGrid minesFlagged
+
                               liftIO $ threadDelay 1000000
                               let safeCellsRevealed = revealSafeCells minesFlagged
                               updateGrid safeCellsRevealed
-                              innerLoop newState safeCellsRevealed
+
+                              liftIO $ threadDelay 1000000
+                              let revealed121Cells = flagMines121 safeCellsRevealed
+                              updateGrid revealed121Cells
+
+                              innerLoop newState revealed121Cells
                             | otherwise = return newState
 
 

@@ -3,7 +3,8 @@ insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell,
 revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame,
  board, gameOver, isRevealed, isMine, isFlagged, adjMines, Grid.empty, getCell1d, isValidPos, intToCoord, countNeighbourFlags,
  getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours,
-  hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine, getCell, coordToInt, hiddenNeighboursNotFlagged, dummyState, cellToColour)  where
+  hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine,
+   getCell, coordToInt, hiddenNeighboursNotFlagged, dummyState, cellToColour, getValidKnownNeighbours, flagBoardCells, debugState, getCardinalNeighbours, hiddenCardinalNeighbours)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -30,6 +31,13 @@ data GameState = GameState
   , flaggedCount :: Int
   , minesCount :: Int
   } deriving (Show, Eq)
+
+debugState :: GameState
+debugState = GameState {board = debugBoard, gameOver = False, flaggedCount = 0, minesCount = 2}
+debugBoard :: Board
+debugBoard = applyCountBombs $ updateCell (updateCell (generateEmptyBoard 10 10) 21 bCell) 23 bCell
+bCell :: Cell
+bCell = Cell {isMine = True, isRevealed = False, isFlagged = False, adjMines = 0}
 
 empty :: Cell
 empty = Cell False False False 0
@@ -288,6 +296,13 @@ flagBoardCell state n = newState
 
     newState = state {board = newBoard, flaggedCount = newFlagCount}
 
+flagBoardCells :: GameState -> [Int] -> GameState
+flagBoardCells gameState [] = gameState 
+flagBoardCells gameState (n:ns) = flagBoardCells newState ns
+  where
+    newState = flagBoardCell gameState n
+
+
     
 --gets list of all valid neighbours as a list of 1d positions
 getValidNeighbours :: Board -> Int -> [Int]
@@ -302,6 +317,23 @@ getValidNeighbours b pos =
       map (\(row, col) -> row * cols + col)
       $ filter (\(row, col) -> row >= 0 && row < rows && col >= 0 && col < cols)
                neighbors
+
+getCardinalNeighbours :: Board -> Int -> [Int]
+getCardinalNeighbours b pos = 
+    let rows = length b
+        cols = length (head b)
+        (r, c) = intToCoord b pos
+        neighbors = [(r-1, c), (r+1, c), (r, c-1), (r, c+1)]
+    in
+      map (\(row, col) -> row * cols + col)
+      $ filter (\(row, col) -> row >= 0 && row < rows && col >= 0 && col < cols)
+               neighbors
+
+hiddenCardinalNeighbours :: Board -> Int -> [Int]
+hiddenCardinalNeighbours b pos = filter (isHidden b) (getCardinalNeighbours b pos)
+
+
+
 
 getValidKnownNeighbours :: Board -> Int -> [Int]
 getValidKnownNeighbours b pos = filter (\n -> (isRevealed (fromMaybe Grid.empty (getCell1d b n)))) $ getValidNeighbours b pos
