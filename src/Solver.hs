@@ -1,4 +1,4 @@
-module Solver(flagKnownMine, revealRandomCell, revealSafeCells, revealSafestCell, nothingCleared, flagMines121, boardWidth, boardLength, numMines) where
+module Solver(flagKnownMine, revealRandomCell, revealSafeCells, nothingCleared, flagMines121, boardWidth, boardLength, numMines) where
 
 {-# LANGUAGE OverloadedStrings #-}
 import Grid
@@ -9,9 +9,9 @@ import Data.Ord (comparing)
 import Debug.Trace (trace)
 
 boardLength, boardWidth, numMines :: Int
-boardLength = 10
-boardWidth = 10
-numMines = 15
+boardLength = 16
+boardWidth = 30
+numMines = 99
 
 
 
@@ -76,30 +76,6 @@ revealSafeCells gameState = newState
                  let neighbours = flaggedNeighbours pos b,
                  length neighbours == adjMines cell]
         newState = foldl revealHiddenNeighboursNotFlagged gameState safeCells
-
-                 
-revealSafestCell :: GameState -> GameState
-revealSafestCell gameState = 
-    if null sortedCellsBySafety 
-    then gameState
-    else revealBoardCell gameState (head sortedCellsBySafety)
-  where
-    b = board gameState
-    rows = length b
-    cols = length (head b)
-    validCells = [pos 
-                 | pos <- [0..(rows * cols) - 1],
-                   let cell = fromMaybe Grid.empty (getCell1d b pos),
-                   not (isRevealed cell),
-                   not (isFlagged cell)]
-    sortedCellsBySafety = 
-        trace debugOutput $
-        sortBy (comparing (probabilityCellIsMine b)) validCells
-    debugOutput = 
-        unlines [ "Valid cells: " ++ show validCells,
-                  "Cells with their safety value: " ++ show [(pos, probabilityCellIsMine b pos) | pos <- validCells]
-                ]
-
 
 
 boardIsDefault :: GameState -> Bool

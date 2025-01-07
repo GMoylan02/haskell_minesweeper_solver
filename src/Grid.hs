@@ -338,39 +338,6 @@ hiddenCardinalNeighbours b pos = filter (isHidden b) (getCardinalNeighbours b po
 getValidKnownNeighbours :: Board -> Int -> [Int]
 getValidKnownNeighbours b pos = filter (\n -> (isRevealed (fromMaybe Grid.empty (getCell1d b n)))) $ getValidNeighbours b pos
 
-
--- naive way to calculate how likely a tile (denoted by 1d coord) is to be a mine
-probabilityCellIsMine :: Board -> Int -> Double
-probabilityCellIsMine b pos
-  | numHiddenNeighbours == 0 = traceShow ("Cell", pos, "has no hidden neighbours") 0.0
-  | otherwise = traceShow ("Cell", pos, 
-                            "Mines:", numMinesInAdjCells, 
-                            "Flagged:", numFlaggedNeighbours, 
-                            "Hidden:", numHiddenNeighbours) $ 
-                            probabilityValue
-
-  where
-    knownNeighbours = getValidKnownNeighbours b pos
-    neighbours = getValidNeighbours b pos
-    numMinesInAdjCells = length $ filter isMine (map (\n -> fromMaybe Grid.empty (getCell1d b n)) knownNeighbours)
-    numFlaggedNeighbours = length $ filter (posIsFlagged b) neighbours
-    numHiddenNeighbours = length $ filter (\n -> 
-      not (isRevealed (fromMaybe Grid.empty (getCell1d b n))) && 
-      not (posIsFlagged b n)) neighbours
-    p = (fromIntegral numMinesInAdjCells - fromIntegral numFlaggedNeighbours) / fromIntegral numHiddenNeighbours
-    probabilityValue =
-      if p < 0.0 then 1.0 + p
-        else p
-  
-
-
-    debugNeighbours = traceShow ("Cell", pos, 
-                                  "Neighbours:", neighbours,
-                                  "Known Neighbours (revealed):", getValidKnownNeighbours b pos,
-                                  "Valid Neighbours:", getValidNeighbours b pos) ()
-
-
-
 revealCell :: Cell -> Cell
 revealCell c = c {isRevealed = True, isFlagged = False}
 
