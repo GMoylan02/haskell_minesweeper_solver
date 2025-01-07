@@ -73,17 +73,17 @@ setup initialState window = do
     when (not updatedGameOver && victory) $ updateStatus "You Win!"
     liftIO $ putStrLn "Random cell revealed"
 
-  flag121Pattern <- UI.button #. "flag121Cells" # set UI.text "[Debug] Apply the 121 pattern" # set UI.id_ "flag121Cells"
-  on UI.click flag121Pattern $ \_ -> do
+  flag12xPattern <- UI.button #. "flag12xCells" # set UI.text "[Debug] Apply the 12x pattern" # set UI.id_ "flag12xCells"
+  on UI.click flag12xPattern $ \_ -> do
     gameState <- liftIO $ readIORef gameStateRef
-    let newState = flagMines121 gameState
+    let newState = flagMines12x gameState
     liftIO $ writeIORef gameStateRef newState
     let updatedGameOver = gameOver newState
     let victory = isWinningBoard $ board newState
     updateGrid newState
     when updatedGameOver $ updateStatus "Game Over!"
     when (not updatedGameOver && victory) $ updateStatus "You Win!"
-    liftIO $ putStrLn "Applied 121 rule"
+    liftIO $ putStrLn "Applied 12x rule"
 
   solveButton <- UI.button #. "solve" # set UI.text "Ask algorithm to attempt to solve" # set UI.id_ "solve"
   on UI.click solveButton $ \_ -> do
@@ -122,7 +122,7 @@ setup initialState window = do
     [ element flagMinesButton
     , element revealSafeCellsButton
     , element revealRandomCellButton
-    , element flag121Pattern
+    , element flag12xPattern
     ]
 
   getBody window #+ 
@@ -195,7 +195,7 @@ innerLoop initial newState | initial /= newState = do
                               updateGrid safeCellsRevealed
 
                               liftIO $ threadDelay 1000000
-                              let revealed121Cells = flagMines121 safeCellsRevealed
+                              let revealed121Cells = flagMines12x safeCellsRevealed
                               updateGrid revealed121Cells
 
                               innerLoop newState revealed121Cells

@@ -3,8 +3,9 @@ insert, insert2d, cellToChar, printBoard, applyCountBombs, flagCell, revealCell,
 revealBoardCell, flagBoardCell, isGameOver, minesRemaining, isWinningBoard, initialiseGame,
  board, gameOver, isRevealed, isMine, isFlagged, adjMines, Grid.empty, getCell1d, isValidPos, intToCoord, countNeighbourFlags,
  getValidNeighbours, isHidden, toggleFlagBoardCell, flagListOfPositions, flagHiddenNeighbours,
-  hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged, probabilityCellIsMine,
-   getCell, coordToInt, hiddenNeighboursNotFlagged, dummyState, cellToColour, getValidKnownNeighbours, flagBoardCells, debugState, getCardinalNeighbours, hiddenCardinalNeighbours)  where
+  hiddenNeighbours, flaggedNeighbours, revealHiddenNeighboursNotFlagged,
+   getCell, coordToInt, hiddenNeighboursNotFlagged, dummyState, cellToColour, 
+   getValidKnownNeighbours, flagBoardCells, debugState, getCardinalNeighbours, hiddenCardinalNeighbours, revealBoardCells)  where
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -179,6 +180,13 @@ revealBoardCell gameState pos =
 
   in
     newBoard { gameOver = gameOver newBoard || isGameOver }
+
+
+revealBoardCells :: GameState -> [Int] -> GameState
+revealBoardCells gameState [] = gameState 
+revealBoardCells gameState (n:ns) = revealBoardCells newState ns
+  where
+    newState = revealBoardCell gameState n
 
 
 

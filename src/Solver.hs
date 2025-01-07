@@ -1,4 +1,4 @@
-module Solver(flagKnownMine, revealRandomCell, revealSafeCells, nothingCleared, flagMines121, boardWidth, boardLength, numMines) where
+module Solver(flagKnownMine, revealRandomCell, revealSafeCells, nothingCleared, boardWidth, boardLength, numMines, flagMines12x) where
 
 {-# LANGUAGE OverloadedStrings #-}
 import Grid
@@ -9,9 +9,9 @@ import Data.Ord (comparing)
 import Debug.Trace (trace)
 
 boardLength, boardWidth, numMines :: Int
-boardLength = 16
-boardWidth = 30
-numMines = 99
+boardLength = 10
+boardWidth = 10
+numMines = 15
 
 
 
@@ -92,57 +92,25 @@ nothingCleared gameState = not (any isCleared (concat b))
     b = board gameState  
     isCleared cell = isRevealed cell && adjMines cell == 0
 
-flagMines121 :: GameState -> GameState
-flagMines121 gameState = 
-  trace ("Flagging 121: " ++ show flaggedPositions) -- debug
+
+flagMines12x :: GameState -> GameState 
+flagMines12x gameState = 
+  trace ("Flagging 12x: " ++ show flaggedPositions) -- debug
   newState
   where
-    flaggedPositions = apply121Rule (board gameState)
+    flaggedPositions = apply12xRule (board gameState)
     newState = flagBoardCells gameState flaggedPositions
 
-apply121Rule :: Board -> [Int]
-apply121Rule board = concat [check121 pos board | pos <- [0..(rows * cols)-1]]
+apply12xRule :: Board -> [Int]
+apply12xRule board = concat [check12x pos board | pos <- [0..(rows * cols)-1]]
   where
     rows = length board
     cols = length (head board)
 
-check121 :: Int -> Board -> [Int]
-check121 index board =
-  case getCell1d board index of
-    Just cell | isRevealed cell && adjMines cell == 2 ->
-      let
-          validPairs = find121Patterns index board
-          unrevealedTiles = concatMap (\(prev, next) -> findUnrevealedFromPair board (prev, next) index) validPairs
-      in if not (null validPairs)
-         then unrevealedTiles
-         else []
-    _ -> []
-
-
-find121Patterns :: Int -> Board -> [(Int, Int)]
-find121Patterns index board =
-  let
-      revealedNeighbors = getValidKnownNeighbours board index
-      linearNeighbors = filter (isLinear index board) revealedNeighbors
-
-      is121Pattern (prev, next) =
-        isLinearTriple prev index next &&
-        maybe False (\c -> adjMines c == 1) (getCell1d board prev) &&
-        maybe False (\c -> adjMines c == 1) (getCell1d board next)
-  in [(prev, next) | prev <- linearNeighbors, next <- linearNeighbors, prev /= next, is121Pattern (prev, next)]
 
 isLinearTriple :: Int -> Int -> Int -> Bool
 isLinearTriple i1 i2 i3 = 
   (sameRow i1 i2 && sameRow i2 i3) || (sameColumn i1 i2 && sameColumn i2 i3)
-
-findUnrevealedFromPair :: Board -> (Int, Int) -> Int -> [Int]
-findUnrevealedFromPair board (prev, next) middle
-  | sameRow prev next = 
-      filter (not . sameRow middle) $ hiddenCardinalNeighbours board prev ++ hiddenCardinalNeighbours board next
-  | sameColumn prev next = 
-      filter (not . sameColumn middle) $ hiddenCardinalNeighbours board prev ++ hiddenCardinalNeighbours board next
-  | otherwise = [] 
-
 
 isLinear :: Int -> Board -> Int -> Bool
 isLinear index board neighbor = sameRow index neighbor || sameColumn index neighbor
@@ -152,6 +120,42 @@ sameRow i1 i2 = i1 `div` boardWidth == i2 `div` boardWidth
 
 sameColumn :: Int -> Int -> Bool
 sameColumn i1 i2 = i1 `mod` boardWidth == i2 `mod` boardWidth
+
+check12x :: Int -> Board -> [Int]
+check12x index board =
+  case getCell1d board index of
+    Just cell | isRevealed cell && adjMines cell >= 2 ->
+      let
+
+          validPairs = find12xPatterns index board
+          unrevealedTiles = concatMap (\(prev, next) -> findUnrevealedFromPair board (prev, next) index) validPairs
+      in if not (null validPairs)
+         then unrevealedTiles
+         else []
+    _ -> []
+
+find12xPatterns :: Int -> Board -> [(Int, Int)]
+find12xPatterns index board =
+  let
+      revealedNeighbors = getValidKnownNeighbours board index
+      linearNeighbors = filter (isLinear index board) revealedNeighbors
+
+      is12xPattern (prev, next) =
+        isLinearTriple prev index next &&
+        maybe False (\c -> adjMines c == 1) (getCell1d board prev) &&
+        maybe False (\c -> adjMines c == 1) (getCell1d board next)
+  in [(prev, next) | prev <- linearNeighbors, next <- linearNeighbors, prev /= next, is12xPattern (prev, next)]
+
+findUnrevealedFromPair :: Board -> (Int, Int) -> Int -> [Int]
+findUnrevealedFromPair board (prev, next) middle
+  | sameRow prev next = 
+      filter (not . sameRow middle) $ hiddenCardinalNeighbours board prev ++ hiddenCardinalNeighbours board next
+  | sameColumn prev next = 
+      filter (not . sameColumn middle) $ hiddenCardinalNeighbours board prev ++ hiddenCardinalNeighbours board next
+  | otherwise = []
+
+
+
 
 
 
