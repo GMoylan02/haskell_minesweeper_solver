@@ -146,7 +146,7 @@ while not gameOver && not isWinningBoard:
     while b changes:
         flagKnownMine
         revealSafeCells
-        flagMines121
+        flagMines12X
     revealRandomCell
 return gamestate
 
